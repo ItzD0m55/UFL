@@ -4,6 +4,12 @@
 
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  'https://flxydemwwfcqkkonpjye.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZseHlkZW13d2ZjcWtrb25wanllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3NDc2OTUsImV4cCI6MjA2NzMyMzY5NX0.vmNmNEod8PaUJS_Fd-16aamGclH8s1jSf-4uyPpTs0A'
+);
 
 const platforms = ['UFL PC', 'UFL PS5', 'UFL XBOX'] as const;
 type Platform = typeof platforms[number];
@@ -41,14 +47,41 @@ export default function Home() {
   const [search, setSearch] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
 
-  useEffect(() => {
-    const savedFighters = localStorage.getItem('fighters');
-    const savedFights = localStorage.getItem('fights');
-    const savedChampions = localStorage.getItem('champions');
-    if (savedFighters) setFighters(JSON.parse(savedFighters));
-    if (savedFights) setFights(JSON.parse(savedFights));
-    if (savedChampions) setChampions(JSON.parse(savedChampions));
-  }, []);
+ useEffect(() => {
+  const loadSupabaseData = async () => {
+    try {
+      const { data: fightersData } = await supabase.from('fighters').select('*');
+      const { data: fightsData } = await supabase.from('fights').select('*');
+      const { data: champsData } = await supabase.from('champions').select('*');
+
+      if (fightersData) setFighters(fightersData);
+      if (fightsData) setFights(fightsData);
+      if (champsData) {
+        const formattedChamps: Record<Platform, string> = {
+          'UFL PC': '',
+          'UFL PS5': '',
+          'UFL XBOX': '',
+        };
+        champsData.forEach((c: any) => {
+          formattedChamps[c.platform as Platform] = c.name;
+        });
+        setChampions(formattedChamps);
+      }
+    } catch (err) {
+      console.error('Supabase load failed, falling back to localStorage:', err);
+
+      const savedFighters = localStorage.getItem('fighters');
+      const savedFights = localStorage.getItem('fights');
+      const savedChampions = localStorage.getItem('champions');
+
+      if (savedFighters) setFighters(JSON.parse(savedFighters));
+      if (savedFights) setFights(JSON.parse(savedFights));
+      if (savedChampions) setChampions(JSON.parse(savedChampions));
+    }
+  };
+
+  loadSupabaseData();
+}, []);
 
   useEffect(() => {
     localStorage.setItem('fighters', JSON.stringify(fighters));
@@ -70,6 +103,8 @@ export default function Home() {
       previousRank: 0,
     };
     setFighters([...fighters, newFighter]);
+
+    supabase.from('fighters').insert([newFighter]);
   };
 
   const addFight = (fight: Fight) => {
@@ -89,13 +124,27 @@ export default function Home() {
     });
     setFighters(updatedFighters);
     setFights([...fights, fight]);
+
+    supabase.from('fights').insert([fight]);
   };
 
  const deleteFight = (index: number) => {
+  const fightToDelete = fights[index];
   const updatedFights = [...fights];
   updatedFights.splice(index, 1);
   setFights(updatedFights);
   recalculateRecords(updatedFights);
+
+  // Sync Supabase
+  supabase
+    .from('fights')
+    .delete()
+    .match({
+      fighter1: fightToDelete.fighter1,
+      fighter2: fightToDelete.fighter2,
+      date: fightToDelete.date,
+      platform: fightToDelete.platform,
+    });
 };
 
   const deleteFighter = (name: string) => {
@@ -115,6 +164,7 @@ export default function Home() {
   setChampions(updatedChampions);
   setFights(remainingFights);
   recalculateRecords(remainingFights);
+  supabase.from('fighters').delete().eq('name', name);
   setFighters(remainingFighters);
 };
 
@@ -125,17 +175,17 @@ export default function Home() {
   }
 
   // Update fighter name
-  const updatedFighters = fighters.map(f =>
-    f.name === oldName ? { ...f, name: newName } : f
-  );
+ supabase
+  .from('fighters')
+  .update({ name: newName })
+  .eq('name', oldName);
 
-  // Update all fights with new name
-  const updatedFights = fights.map(fight => ({
-    ...fight,
-    fighter1: fight.fighter1 === oldName ? newName : fight.fighter1,
-    fighter2: fight.fighter2 === oldName ? newName : fight.fighter2,
-    winner: fight.winner === oldName ? newName : fight.winner
-  }));
+const updatedFights = fights.map(fight => ({
+  ...fight,
+  fighter1: fight.fighter1 === oldName ? newName : fight.fighter1,
+  fighter2: fight.fighter2 === oldName ? newName : fight.fighter2,
+  winner: fight.winner === oldName ? newName : fight.winner
+}));
 
   // Update champion names
   const updatedChamps = { ...champions };
@@ -150,9 +200,14 @@ export default function Home() {
   recalculateRecords(updatedFights, updatedFighters); // Fix: pass updated fighter list
 };
 
-  const setChampion = (platform: Platform, name: string) => {
-    setChampions({ ...champions, [platform]: name });
-  };
+ const setChampion = (platform: Platform, name: string) => {
+  const updatedChamps = { ...champions, [platform]: name };
+  setChampions(updatedChamps);
+
+  supabase
+    .from('champions')
+    .upsert([{ platform, name }], { onConflict: ['platform'] }); // 👈 Save to Supabase
+};
 
   const rankedFighters = (platform: Platform) => {
     const platformFighters = fighters.filter(f => f.platform === platform && f.name !== champions[platform]);
@@ -431,23 +486,38 @@ const recalculateRecords = (
             <p>Date: {fight.date}</p>
             <button
               className="mt-2 mr-2 px-3 py-1 bg-yellow-600 rounded text-sm"
-              onClick={() => {
-                const newWinner = prompt('Edit Winner:', fight.winner);
-                const newMethod = prompt('Edit Method (KO, Decision, Draw):', fight.method);
-                const newDate = prompt('Edit Date (YYYY-MM-DD):', fight.date);
+             onClick={() => {
+  const newWinner = prompt('Edit Winner:', fight.winner);
+  const newMethod = prompt('Edit Method (KO, Decision, Draw):', fight.method);
+  const newDate = prompt('Edit Date (YYYY-MM-DD):', fight.date);
 
-                if (!newWinner || !newMethod || !newDate) return;
+  if (!newWinner || !newMethod || !newDate) return;
 
-                const updatedFights = [...fights];
-                updatedFights[i] = {
-                  ...fight,
-                  winner: newWinner,
-                  method: newMethod as 'KO' | 'Decision' | 'Draw',
-                  date: newDate,
-                };
-                setFights(updatedFights);
-                recalculateRecords(updatedFights);
-              }}
+  const updatedFights = [...fights];
+  updatedFights[i] = {
+    ...fight,
+    winner: newWinner,
+    method: newMethod as 'KO' | 'Decision' | 'Draw',
+    date: newDate,
+  };
+  setFights(updatedFights);
+  recalculateRecords(updatedFights);
+
+  // ✅ Save changes to Supabase
+  supabase
+    .from('fights')
+    .update({
+      winner: newWinner,
+      method: newMethod,
+      date: newDate,
+    })
+    .match({
+      fighter1: fight.fighter1,
+      fighter2: fight.fighter2,
+      date: fight.date,
+      platform: fight.platform,
+    });
+}}
             >
               Edit
             </button>

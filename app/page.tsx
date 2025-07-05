@@ -197,7 +197,7 @@ const updatedFights = fights.map(fight => ({
 
   setFights(updatedFights);
   setChampions(updatedChamps);
-  recalculateRecords(updatedFights, updatedFighters); // Fix: pass updated fighter list
+  recalculateRecords(updatedFights);
 };
 
  const setChampion = (platform: Platform, name: string) => {

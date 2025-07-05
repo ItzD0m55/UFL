@@ -206,7 +206,7 @@ const updatedFights = fights.map(fight => ({
 
  supabase
   .from('champions')
-  .upsert([{ platform, name }], { onConflict: 'platform' });
+  .upsert([{ platform: platform as string, name }], { onConflict: 'platform' });
 };
 
   const rankedFighters = (platform: Platform) => {

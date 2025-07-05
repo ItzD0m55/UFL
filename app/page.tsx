@@ -7,8 +7,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  'https://flxydemwwfcqkkonpjye.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZseHlkZW13d2ZjcWtrb25wanllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3NDc2OTUsImV4cCI6MjA2NzMyMzY5NX0.vmNmNEod8PaUJS_Fd-16aamGclH8s1jSf-4uyPpTs0A'
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
 const platforms = ['UFL PC', 'UFL PS5', 'UFL XBOX'] as const;

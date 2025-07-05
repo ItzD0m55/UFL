@@ -1,4 +1,5 @@
-// pages/index.tsx
+// app/page.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -21,7 +22,7 @@ type Fight = {
   fighter1: string;
   fighter2: string;
   winner: string;
-  method: 'KO' | 'Decision';
+  method: 'KO' | 'Decision' | 'Draw';
   platform: Platform;
   date: string;
 };
@@ -38,6 +39,7 @@ export default function Home() {
   const [admin, setAdmin] = useState(false);
   const [password, setPassword] = useState('');
   const [search, setSearch] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const savedFighters = localStorage.getItem('fighters');
@@ -55,7 +57,9 @@ export default function Home() {
   }, [fighters, fights, champions]);
 
   const addFighter = (name: string, platform: Platform) => {
-    if (fighters.find(f => f.name === name)) return alert('Name already exists');
+    if (fighters.find(f => f.name === name && f.platform === platform)) {
+  return alert('Fighter with this name already exists on this platform');
+}
     const newFighter: Fighter = {
       name,
       platform,
@@ -87,18 +91,71 @@ export default function Home() {
     setFights([...fights, fight]);
   };
 
-  const deleteFight = (index: number) => {
-    const updatedFights = [...fights];
-    updatedFights.splice(index, 1);
-    setFights(updatedFights);
-  };
+ const deleteFight = (index: number) => {
+  const updatedFights = [...fights];
+  updatedFights.splice(index, 1);
+  setFights(updatedFights);
+  recalculateRecords(updatedFights);
+};
+
+  const deleteFighter = (name: string) => {
+  const remainingFighters = fighters.filter(f => f.name !== name);
+
+  const remainingFights = fights.filter(
+    fight => fight.fighter1 !== name && fight.fighter2 !== name
+  );
+
+  const updatedChampions = { ...champions };
+  for (const platform of platforms) {
+    if (updatedChampions[platform] === name) {
+      updatedChampions[platform] = '';
+    }
+  }
+
+  setChampions(updatedChampions);
+  setFights(remainingFights);
+  recalculateRecords(remainingFights);
+  setFighters(remainingFighters);
+};
+
+  const editFighterName = (oldName: string, newName: string) => {
+  if (!newName || fighters.some(f => f.name === newName)) {
+    alert("Invalid or duplicate name.");
+    return;
+  }
+
+  // Update fighter name
+  const updatedFighters = fighters.map(f =>
+    f.name === oldName ? { ...f, name: newName } : f
+  );
+
+  // Update all fights with new name
+  const updatedFights = fights.map(fight => ({
+    ...fight,
+    fighter1: fight.fighter1 === oldName ? newName : fight.fighter1,
+    fighter2: fight.fighter2 === oldName ? newName : fight.fighter2,
+    winner: fight.winner === oldName ? newName : fight.winner
+  }));
+
+  // Update champion names
+  const updatedChamps = { ...champions };
+  for (const platform of platforms) {
+    if (updatedChamps[platform] === oldName) {
+      updatedChamps[platform] = newName;
+    }
+  }
+
+  setFights(updatedFights);
+  setChampions(updatedChamps);
+  recalculateRecords(updatedFights, updatedFighters); // Fix: pass updated fighter list
+};
 
   const setChampion = (platform: Platform, name: string) => {
     setChampions({ ...champions, [platform]: name });
   };
 
   const rankedFighters = (platform: Platform) => {
-    const platformFighters = fighters.filter(f => f.platform === platform);
+    const platformFighters = fighters.filter(f => f.platform === platform && f.name !== champions[platform]);
     return platformFighters
       .map(f => {
         const quality = fights
@@ -117,100 +174,59 @@ export default function Home() {
       })
       .slice(0, 10);
   };
+  
+const recalculateRecords = (
+  fightsToUse: Fight[],
+  fighterList: Fighter[] = fighters
+) => {
+  const updatedFighters = fighterList.map(f => {
+    const relevantFights = fightsToUse.filter(
+      fight =>
+        (fight.fighter1 === f.name || fight.fighter2 === f.name) &&
+        fight.platform === f.platform
+    );
+
+    let wins = 0,
+      losses = 0,
+      draws = 0,
+      koWins = 0;
+
+    relevantFights.forEach(fight => {
+      const isWinner = fight.winner === f.name;
+      const isDraw = fight.winner === 'Draw';
+      const isLoser =
+        !isWinner &&
+        !isDraw &&
+        (fight.fighter1 === f.name || fight.fighter2 === f.name);
+
+      if (isWinner) {
+        wins++;
+        if (fight.method === 'KO') koWins++;
+      } else if (isLoser) {
+        losses++;
+      } else if (isDraw) {
+        draws++;
+      }
+    });
+
+    return { ...f, wins, losses, draws, koWins };
+  });
+
+  setFighters(updatedFighters);
+};
 
   return (
-    <motion.main initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6 }} className="relative overflow-hidden bg-gradient-to-br from-gray-900 to-black min-h-screen text-white p-6">
-      <motion.div 
-        className="absolute top-0 left-0 w-full h-full bg-gradient-to-tr from-blue-900/20 to-cyan-900/20 animate-pulse blur-xl z-0"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0.5 }}
-        transition={{ duration: 2 }}
-      />
-      <div className="relative z-10">
-      <motion.h1
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-        className="text-4xl font-bold text-center mb-6 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500"
-      >
-      UFL WORLD RANKINGS
-      </motion.h1>
-      <nav className="flex flex-wrap justify-center gap-3 text-lg mb-6">
+    <main className="p-4 text-white bg-gradient-to-br from-gray-900 to-black min-h-screen">
+      <h1 className="text-4xl font-bold text-center text-cyan-400 mb-6">UFL WORLD RANKINGS</h1>
+      <nav className="flex flex-wrap justify-center gap-4 mb-6">
         {['Records', ...platforms, 'Fights', 'Admin'].map(t => (
-          <motion.button key={t} onClick={() => setTab(t as any)} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} className="px-4 py-2 rounded-md bg-gray-800 hover:bg-gray-700 transition-colors">
+          <button key={t} onClick={() => setTab(t as any)} className="px-4 py-2 rounded bg-gray-800 hover:bg-gray-700">
             {t}
-          </motion.button>
+          </button>
         ))}
       </nav>
 
-      {tab === 'Records' && (
-        <div>
-          <input
-            className="mb-4 p-2 bg-gray-800 border border-gray-600"
-            placeholder="Search Fighters..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {fighters.filter(f => f.name.toLowerCase().includes(search.toLowerCase())).map(f => (
-              <div key={f.name} className="bg-gray-800 p-4 rounded-xl shadow-xl">
-                <h2 className="text-xl font-bold text-cyan-400">{f.name}</h2>
-                <p>Wins: {f.wins}</p>
-                <p>Losses: {f.losses}</p>
-                <p>Draws: {f.draws}</p>
-                <p>KO %: {f.wins > 0 ? ((f.koWins / f.wins) * 100).toFixed(1) : 0}%</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {platforms.includes(tab as Platform) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="col-span-full text-2xl font-bold mb-2">
-            Champion: 🏆 {champions[tab as Platform] || 'None'}
-          </div>
-          {rankedFighters(tab as Platform).map((f, i) => (
-            <motion.div
-              key={f.name}
-              className="bg-gray-800 p-4 rounded-xl shadow-xl"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <h2 className="text-xl font-bold">#{i + 1} {f.name}</h2>
-              <p>Wins: {f.wins}</p>
-              <p>Losses: {f.losses}</p>
-              <p>Draws: {f.draws}</p>
-              <p>KO %: {f.wins > 0 ? ((f.koWins / f.wins) * 100).toFixed(1) : 0}%</p>
-            </motion.div>
-          ))}
-        </div>
-      )}
-
-      {tab === 'Fights' && (
-        <div>
-          <input
-            className="mb-4 p-2 bg-gray-800 border border-gray-600"
-            placeholder="Search Fights..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          <div className="space-y-4">
-            {fights.filter(f => f.fighter1.toLowerCase().includes(search.toLowerCase()) || f.fighter2.toLowerCase().includes(search.toLowerCase())).map((fight, i) => (
-              <div key={i} className="bg-gray-800 p-4 rounded-xl shadow">
-                <p>{fight.fighter1} vs {fight.fighter2}</p>
-                <p>Winner: {fight.winner}</p>
-                <p>Method: {fight.method}</p>
-                <p>Platform: {fight.platform}</p>
-                <p>Date: {fight.date}</p>
-                {admin && <button onClick={() => deleteFight(i)} className="text-red-500">Delete</button>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
+      {/* Admin Panel */}
       {tab === 'Admin' && (
         <div>
           {!admin ? (
@@ -222,7 +238,7 @@ export default function Home() {
                 onChange={e => setPassword(e.target.value)}
               />
               <button
-                onClick={() => setAdmin(password === '690FAHG3671279FGKASGF')}
+                onClick={() => setAdmin(password === 'G36DSFGB3873GFDIY38HS9I34G')}
                 className="ml-2 px-4 py-2 bg-green-600 rounded"
               >Login</button>
             </div>
@@ -242,41 +258,50 @@ export default function Home() {
                     addFighter(nameInput.value, platformSelect.value as Platform);
                   }}
                 >Add</button>
-              </div>
-              <div>
-                <h2 className="text-xl font-bold">Add Fight</h2>
-                <select id="f1" className="p-2 bg-gray-800 border">
-                  {fighters.map(f => <option key={f.name}>{f.name}</option>)}
-                </select>
-                <select id="f2" className="ml-2 p-2 bg-gray-800 border">
-                  {fighters.map(f => <option key={f.name}>{f.name}</option>)}
-                </select>
-                <select id="winner" className="ml-2 p-2 bg-gray-800 border">
-                  <option>Draw</option>
-                  {fighters.map(f => <option key={f.name}>{f.name}</option>)}
-                </select>
-                <select id="method" className="ml-2 p-2 bg-gray-800 border">
-                  <option>KO</option>
-                  <option>Decision</option>
-                </select>
-                <select id="fightPlatform" className="ml-2 p-2 bg-gray-800 border">
-                  {platforms.map(p => <option key={p}>{p}</option>)}
-                </select>
-                <input id="date" type="date" className="ml-2 p-2 bg-gray-800 border" />
-                <button
-                  className="ml-2 px-4 py-2 bg-green-600 rounded"
-                  onClick={() => {
-                    const f1 = (document.getElementById('f1') as HTMLSelectElement).value;
-                    const f2 = (document.getElementById('f2') as HTMLSelectElement).value;
-                    const winner = (document.getElementById('winner') as HTMLSelectElement).value;
-                    const method = (document.getElementById('method') as HTMLSelectElement).value;
-                    const platform = (document.getElementById('fightPlatform') as HTMLSelectElement).value as Platform;
-                    const date = (document.getElementById('date') as HTMLInputElement).value;
-                    if (f1 && f2 && method && platform && date) {
-                      addFight({ fighter1: f1, fighter2: f2, winner, method: method as 'KO' | 'Decision', platform, date });
-                    }
-                  }}
-                >Add Fight</button>
+                <div>
+  <h2 className="text-xl font-bold">Add Fight</h2>
+  <select id="fighter1" className="p-2 bg-gray-800 border mr-2">
+    {fighters.map(f => <option key={f.name}>{f.name}</option>)}
+  </select>
+  <select id="fighter2" className="p-2 bg-gray-800 border mr-2">
+    {fighters.map(f => <option key={f.name}>{f.name}</option>)}
+  </select>
+  <select id="winner" className="p-2 bg-gray-800 border mr-2">
+    <option>Draw</option>
+    {fighters.map(f => <option key={f.name}>{f.name}</option>)}
+  </select>
+  <select id="method" className="p-2 bg-gray-800 border mr-2">
+    <option>KO</option>
+    <option>Decision</option>
+    <option>Draw</option>
+  </select>
+  <select id="platformFight" className="p-2 bg-gray-800 border mr-2">
+    {platforms.map(p => <option key={p}>{p}</option>)}
+  </select>
+  <input id="date" type="date" className="p-2 bg-gray-800 border mr-2" />
+  <button
+    className="px-4 py-2 bg-green-600 rounded"
+    onClick={() => {
+      const fighter1 = (document.getElementById('fighter1') as HTMLSelectElement).value;
+      const fighter2 = (document.getElementById('fighter2') as HTMLSelectElement).value;
+      const winner = (document.getElementById('winner') as HTMLSelectElement).value;
+      const method = (document.getElementById('method') as HTMLSelectElement).value as 'KO' | 'Decision' | 'Draw';
+      const platform = (document.getElementById('platformFight') as HTMLSelectElement).value as Platform;
+      const date = (document.getElementById('date') as HTMLInputElement).value;
+
+      if (!fighter1 || !fighter2 || !method || !platform || !date) {
+        return alert('Please fill out all fields.');
+      }
+      if (fighter1 === fighter2) {
+        return alert('Fighter cannot fight themselves.');
+      }
+
+      addFight({ fighter1, fighter2, winner, method, platform, date });
+    }}
+  >
+    Add Fight
+  </button>
+</div>
               </div>
               <div>
                 <h2 className="text-xl font-bold">Set Champion</h2>
@@ -294,13 +319,154 @@ export default function Home() {
                       ))}
                     </select>
                   </div>
+              
                 ))}
+              </div>
+              <div>
+                <div className="mt-6">
+  <h2 className="text-xl font-bold">Edit Fighter Name</h2>
+  <select id="editFighterOld" className="p-2 bg-gray-800 border mr-2">
+    {fighters.map(f => (
+      <option key={f.name}>{f.name}</option>
+    ))}
+  </select>
+  <input
+    id="editFighterNew"
+    placeholder="New Name"
+    className="p-2 bg-gray-800 border mr-2"
+  />
+  <button
+    className="px-4 py-2 bg-yellow-600 rounded"
+    onClick={() => {
+      const oldName = (document.getElementById('editFighterOld') as HTMLSelectElement).value;
+      const newName = (document.getElementById('editFighterNew') as HTMLInputElement).value;
+      editFighterName(oldName, newName);
+    }}
+  >
+    Edit Name
+  </button>
+</div>
+                <h2 className="text-xl font-bold">Delete Fighter</h2>
+                <select id="deleteFighter" className="p-2 bg-gray-800 border">
+                  {fighters.map(f => (
+                    <option key={f.name} value={f.name}>{f.name}</option>
+                  ))}
+                </select>
+                <button
+                  className="ml-2 px-4 py-2 bg-red-600 rounded"
+                  onClick={() => {
+                    const selected = (document.getElementById('deleteFighter') as HTMLSelectElement).value;
+                    if (window.confirm(`Are you sure you want to delete ${selected}?`)) {
+                      deleteFighter(selected);
+                    }
+                  }}
+                >Delete</button>
               </div>
             </div>
           )}
         </div>
       )}
+
+      {/* Existing Tabs */}
+      {tab === 'Records' && (
+        <div>
+          <input
+            className="mb-4 p-2 bg-gray-800 border border-gray-600"
+            placeholder="Search Fighters..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {fighters.filter(f => f.name.toLowerCase().includes(search.toLowerCase())).map(f => (
+              <div key={f.name} className="bg-gray-800 p-4 rounded-xl shadow">
+                <h2 className="text-xl font-bold text-cyan-400">{f.name}</h2>
+                <p>Platform: {f.platform}</p>
+                <p>Wins: {f.wins}</p>
+                <p>Losses: {f.losses}</p>
+                <p>Draws: {f.draws}</p>
+                <p>KO %: {f.wins > 0 ? ((f.koWins / f.wins) * 100).toFixed(1) : 0}%</p>
+              </div>
+            ))}
           </div>
-    </motion.main>
+        </div>
+      )}
+
+      {platforms.includes(tab as Platform) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="col-span-full text-2xl font-bold mb-2">
+            Champion: 🏆 {champions[tab as Platform] || 'None'}
+          </div>
+          {rankedFighters(tab as Platform).map((f, i) => (
+            <div key={f.name} className="bg-gray-800 p-4 rounded-xl shadow">
+              <h2 className="text-xl font-bold">#{i + 1} {f.name}</h2>
+              <p>Wins: {f.wins}</p>
+              <p>Losses: {f.losses}</p>
+              <p>Draws: {f.draws}</p>
+              <p>KO %: {f.wins > 0 ? ((f.koWins / f.wins) * 100).toFixed(1) : 0}%</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+     {tab === 'Fights' && (
+  <div>
+    <input
+      className="mb-4 p-2 bg-gray-800 border border-gray-600"
+      placeholder="Search Fights..."
+      value={search}
+      onChange={e => setSearch(e.target.value)}
+    />
+    <div className="space-y-4">
+      {fights
+        .filter(fight =>
+          fight.fighter1.toLowerCase().includes(search.toLowerCase()) ||
+          fight.fighter2.toLowerCase().includes(search.toLowerCase())
+        )
+        .map((fight, i) => (
+          <div key={i} className="bg-gray-800 p-4 rounded-xl shadow">
+            <p>{fight.fighter1} vs {fight.fighter2}</p>
+            <p>Winner: {fight.winner}</p>
+            <p>Method: {fight.method}</p>
+            <p>Platform: {fight.platform}</p>
+            <p>Date: {fight.date}</p>
+            <button
+              className="mt-2 mr-2 px-3 py-1 bg-yellow-600 rounded text-sm"
+              onClick={() => {
+                const newWinner = prompt('Edit Winner:', fight.winner);
+                const newMethod = prompt('Edit Method (KO, Decision, Draw):', fight.method);
+                const newDate = prompt('Edit Date (YYYY-MM-DD):', fight.date);
+
+                if (!newWinner || !newMethod || !newDate) return;
+
+                const updatedFights = [...fights];
+                updatedFights[i] = {
+                  ...fight,
+                  winner: newWinner,
+                  method: newMethod as 'KO' | 'Decision' | 'Draw',
+                  date: newDate,
+                };
+                setFights(updatedFights);
+                recalculateRecords(updatedFights);
+              }}
+            >
+              Edit
+            </button>
+            <button
+              className="mt-2 px-3 py-1 bg-red-600 rounded text-sm"
+              onClick={() => {
+                if (confirm('Are you sure you want to delete this fight?')) {
+                  deleteFight(i);
+                }
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        ))}
+    </div>
+  </div>
+)}
+
+    </main>
   );
 }

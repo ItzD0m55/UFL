@@ -204,9 +204,9 @@ const updatedFights = fights.map(fight => ({
   const updatedChamps = { ...champions, [platform]: name };
   setChampions(updatedChamps);
 
-  supabase
+ supabase
   .from('champions')
-  .upsert([{ platform, name }], { onConflict: ['platform'] }); // ✅ Fix: valid format
+  .upsert([{ platform, name }], { onConflict: 'platform' });
 };
 
   const rankedFighters = (platform: Platform) => {

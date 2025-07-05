@@ -47,40 +47,40 @@ export default function Home() {
   const [search, setSearch] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
 
- useEffect(() => {
-  const loadSupabaseData = async () => {
-    try {
-      const { data: fightersData } = await supabase.from('fighters').select('*');
-      const { data: fightsData } = await supabase.from('fights').select('*');
-      const { data: champsData } = await supabase.from('champions').select('*');
+ const refreshData = async () => {
+  try {
+    const { data: fightersData } = await supabase.from('fighters').select('*');
+    const { data: fightsData } = await supabase.from('fights').select('*');
+    const { data: champsData } = await supabase.from('champions').select('*');
 
-      if (fightersData) setFighters(fightersData);
-      if (fightsData) setFights(fightsData);
-      if (champsData) {
-        const formattedChamps: Record<Platform, string> = {
-          'UFL PC': '',
-          'UFL PS5': '',
-          'UFL XBOX': '',
-        };
-        champsData.forEach((c: any) => {
-          formattedChamps[c.platform as Platform] = c.name;
-        });
-        setChampions(formattedChamps);
-      }
-    } catch (err) {
-      console.error('Supabase load failed, falling back to localStorage:', err);
-
-      const savedFighters = localStorage.getItem('fighters');
-      const savedFights = localStorage.getItem('fights');
-      const savedChampions = localStorage.getItem('champions');
-
-      if (savedFighters) setFighters(JSON.parse(savedFighters));
-      if (savedFights) setFights(JSON.parse(savedFights));
-      if (savedChampions) setChampions(JSON.parse(savedChampions));
+    if (fightersData) setFighters(fightersData);
+    if (fightsData) setFights(fightsData);
+    if (champsData) {
+      const formattedChamps: Record<Platform, string> = {
+        'UFL PC': '',
+        'UFL PS5': '',
+        'UFL XBOX': '',
+      };
+      champsData.forEach((c: any) => {
+        formattedChamps[c.platform as Platform] = c.name;
+      });
+      setChampions(formattedChamps);
     }
-  };
+  } catch (err) {
+    console.error('Supabase load failed, falling back to localStorage:', err);
 
-  loadSupabaseData();
+    const savedFighters = localStorage.getItem('fighters');
+    const savedFights = localStorage.getItem('fights');
+    const savedChampions = localStorage.getItem('champions');
+
+    if (savedFighters) setFighters(JSON.parse(savedFighters));
+    if (savedFights) setFights(JSON.parse(savedFights));
+    if (savedChampions) setChampions(JSON.parse(savedChampions));
+  }
+};
+
+useEffect(() => {
+  refreshData();
 }, []);
 
   useEffect(() => {
@@ -125,7 +125,7 @@ export default function Home() {
     setFighters(updatedFighters);
     setFights([...fights, fight]);
 
-    supabase.from('fights').insert([fight]);
+   supabase.from('fights').insert([fight]).then(() => refreshData());
   };
 
  const deleteFight = (index: number) => {
@@ -138,7 +138,7 @@ export default function Home() {
   // Sync Supabase
   supabase
     .from('fights')
-    .delete()
+    .delete().then(() => refreshData());
     .match({
       fighter1: fightToDelete.fighter1,
       fighter2: fightToDelete.fighter2,
@@ -164,7 +164,7 @@ export default function Home() {
   setChampions(updatedChampions);
   setFights(remainingFights);
   recalculateRecords(remainingFights);
-  supabase.from('fighters').delete().eq('name', name);
+  supabase.from('fighters').delete().eq('name', name).then(() => refreshData());
   setFighters(remainingFighters);
 };
 
@@ -178,7 +178,8 @@ export default function Home() {
  supabase
   .from('fighters')
   .update({ name: newName })
-  .eq('name', oldName);
+  .eq('name', oldName)
+  .then(() => refreshData());
 
 const updatedFights = fights.map(fight => ({
   ...fight,

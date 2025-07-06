@@ -89,113 +89,114 @@ useEffect(() => {
     localStorage.setItem('champions', JSON.stringify(champions));
   }, [fighters, fights, champions]);
 
-  const addFighter = (name: string, platform: Platform) => {
-    if (fighters.find(f => f.name === name && f.platform === platform)) {
-  return alert('Fighter with this name already exists on this platform');
-}
-    const newFighter: Fighter = {
-      name,
-      platform,
-      wins: 0,
-      losses: 0,
-      draws: 0,
-      koWins: 0,
-      previousRank: 0,
-    };
-    
-   supabase
-  .from('fighters')
-  .insert([newFighter])
-  .then(() => {
-    setFighters([...fighters, newFighter]);
-    refreshData();
-  })
-  .catch(err => console.error('Insert error:', err.message));
-}; // ✅ This ends addFighter properly
-
-  const addFight = (fight: Fight) => {
-    const updatedFighters = fighters.map(f => {
-      if (f.name === fight.fighter1 || f.name === fight.fighter2) {
-        const isWinner = f.name === fight.winner;
-        const isDraw = fight.winner === 'Draw';
-        return {
-          ...f,
-          wins: f.wins + (isWinner ? 1 : 0),
-          losses: f.losses + (!isWinner && !isDraw ? 1 : 0),
-          draws: f.draws + (isDraw ? 1 : 0),
-          koWins: f.koWins + (isWinner && fight.method === 'KO' ? 1 : 0),
-        };
-      }
-      return f;
-    });
-    setFighters(updatedFighters);
-    setFights([...fights, fight]);
-
-   supabase.from('fights').insert([fight]).then(() => refreshData());
-  };
-
- const deleteFight = (index: number) => {
-  const fightToDelete = fights[index];
-  const updatedFights = [...fights];
-  updatedFights.splice(index, 1);
-  setFights(updatedFights);
-  recalculateRecords(updatedFights);
-
-  // Sync Supabase
-  supabase
-    .from('fights')
-    .delete()
-    .match({
-      fighter1: fightToDelete.fighter1,
-      fighter2: fightToDelete.fighter2,
-      date: fightToDelete.date,
-      platform: fightToDelete.platform,
-    })
-    .then(() => refreshData());
-};
-
-// ✅ Move this OUTSIDE of deleteFight
-const deleteFighter = (name: string) => {
-  const remainingFighters = fighters.filter(f => f.name !== name);
-  const remainingFights = fights.filter(
-    fight => fight.fighter1 !== name && fight.fighter2 !== name
-  );
-
-  const updatedChampions = { ...champions };
-  for (const platform of platforms) {
-    if (updatedChampions[platform] === name) {
-      updatedChampions[platform] = '';
-    }
+ const addFighter = async (name: string, platform: Platform) => {
+  if (fighters.find(f => f.name === name && f.platform === platform)) {
+    return alert('Fighter with this name already exists on this platform');
   }
 
-  setChampions(updatedChampions);
-  setFights(remainingFights);
-  recalculateRecords(remainingFights);
-  supabase.from('fighters').delete().eq('name', name).then(() => refreshData());
-  setFighters(remainingFighters);
+  const newFighter: Fighter = {
+    name,
+    platform,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    koWins: 0,
+    previousRank: 0,
+  };
+
+  try {
+    await supabase.from('fighters').insert([newFighter]);
+    setFighters([...fighters, newFighter]);
+    refreshData();
+  } catch (err: any) {
+    console.error('Insert error:', err.message);
+  }
 };
 
+ const addFight = async (fight: Fight) => {
+  const updatedFighters = fighters.map(f => {
+    if (f.name === fight.fighter1 || f.name === fight.fighter2) {
+      const isWinner = f.name === fight.winner;
+      const isDraw = fight.winner === 'Draw';
+      return {
+        ...f,
+        wins: f.wins + (isWinner ? 1 : 0),
+        losses: f.losses + (!isWinner && !isDraw ? 1 : 0),
+        draws: f.draws + (isDraw ? 1 : 0),
+        koWins: f.koWins + (isWinner && fight.method === 'KO' ? 1 : 0),
+      };
+    }
+    return f;
+  });
+
+  try {
+    await supabase.from('fights').insert([fight]);
+
+    for (const f of updatedFighters) {
+      await supabase
+        .from('fighters')
+        .update({
+          wins: f.wins,
+          losses: f.losses,
+          draws: f.draws,
+          koWins: f.koWins,
+        })
+        .eq('name', f.name);
+    }
+
+    setFighters(updatedFighters);
+    setFights([...fights, fight]);
+    refreshData();
+  } catch (err: any) {
+    console.error('Add fight error:', err.message);
+  }
+};
+
+const deleteFight = async (index: number) => {
+  const fight = fights[index];
+  const remainingFights = fights.filter((_, i) => i !== index);
+  setFights(remainingFights);
+  recalculateRecords(remainingFights);
+
+  try {
+    await supabase
+      .from('fights')
+      .delete()
+      .match({
+        fighter1: fight.fighter1,
+        fighter2: fight.fighter2,
+        date: fight.date,
+        platform: fight.platform,
+      });
+
+    refreshData();
+  } catch (err: any) {
+    console.error('Delete fight error:', err.message);
+  }
+};
+  
   const editFighterName = (oldName: string, newName: string) => {
   if (!newName || fighters.some(f => f.name === newName)) {
     alert("Invalid or duplicate name.");
     return;
   }
 
-  // Update fighter name
- supabase
-  .from('fighters')
-  .update({ name: newName })
-  .eq('name', oldName)
-  .then(() => refreshData());
+  // Update Supabase
+  supabase
+    .from('fighters')
+    .update({ name: newName })
+    .eq('name', oldName)
+    .then(() => refreshData());
 
-const updatedFights = fights.map(fight => ({
-  ...fight,
-  fighter1: fight.fighter1 === oldName ? newName : fight.fighter1,
-  fighter2: fight.fighter2 === oldName ? newName : fight.fighter2,
-  winner: fight.winner === oldName ? newName : fight.winner
-}));
+  // Update fights
+  const updatedFights = fights.map(fight => ({
+    ...fight,
+    fighter1: fight.fighter1 === oldName ? newName : fight.fighter1,
+    fighter2: fight.fighter2 === oldName ? newName : fight.fighter2,
+    winner: fight.winner === oldName ? newName : fight.winner
+  }));
 
-  // Update champion names
+  // Update champions
   const updatedChamps = { ...champions };
   for (const platform of platforms) {
     if (updatedChamps[platform] === oldName) {
@@ -208,13 +209,17 @@ const updatedFights = fights.map(fight => ({
   recalculateRecords(updatedFights);
 };
 
- const setChampion = (platform: Platform, name: string) => {
+const setChampion = async (platform: Platform, name: string) => {
   const updatedChamps = { ...champions, [platform]: name };
   setChampions(updatedChamps);
 
- supabase
-  .from('champions')
- .upsert([{ platform, name }], { onConflict: 'platform' });
+  try {
+    await supabase
+      .from('champions')
+      .upsert([{ platform, name }], { onConflict: ['platform'] });
+  } catch (err: any) {
+    console.error('Champion update error:', err.message);
+  }
 };
 
   const rankedFighters = (platform: Platform) => {
@@ -511,20 +516,19 @@ const recalculateRecords = (
   setFights(updatedFights);
   recalculateRecords(updatedFights);
 
-  // ✅ Save changes to Supabase
-  supabase
-    .from('fights')
-    .update({
-      winner: newWinner,
-      method: newMethod,
-      date: newDate,
-    })
-    .match({
-      fighter1: fight.fighter1,
-      fighter2: fight.fighter2,
-      date: fight.date,
-      platform: fight.platform,
-    });
+ supabase
+  .from('fights')
+  .update({
+    winner: newWinner,
+    method: newMethod,
+    date: newDate,
+  })
+  .match({
+    fighter1: fight.fighter1,
+    fighter2: fight.fighter2,
+    date: fight.date,
+    platform: fight.platform,
+  });
 }}
             >
               Edit

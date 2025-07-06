@@ -136,15 +136,16 @@ useEffect(() => {
   recalculateRecords(updatedFights);
 
   // Sync Supabase
-  supabase
-    .from('fights')
-    .delete().then(() => refreshData());
-    .match({
-      fighter1: fightToDelete.fighter1,
-      fighter2: fightToDelete.fighter2,
-      date: fightToDelete.date,
-      platform: fightToDelete.platform,
-    });
+ supabase
+  .from('fights')
+  .delete()
+  .match({
+    fighter1: fightToDelete.fighter1,
+    fighter2: fightToDelete.fighter2,
+    date: fightToDelete.date,
+    platform: fightToDelete.platform,
+  })
+  .then(() => refreshData());
 };
 
   const deleteFighter = (name: string) => {
@@ -207,7 +208,7 @@ const updatedFights = fights.map(fight => ({
 
  supabase
   .from('champions')
-  .upsert([{ platform: platform as string, name }], { onConflict: 'platform' });
+  .upsert([{ platform, name }], { onConflict: ['platform'] });
 };
 
   const rankedFighters = (platform: Platform) => {

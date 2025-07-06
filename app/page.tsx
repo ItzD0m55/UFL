@@ -102,10 +102,16 @@ useEffect(() => {
       koWins: 0,
       previousRank: 0,
     };
+    
+   supabase
+  .from('fighters')
+  .insert([newFighter])
+  .then(() => {
     setFighters([...fighters, newFighter]);
-
-    supabase.from('fighters').insert([newFighter]);
-  };
+    refreshData();
+  })
+  .catch(err => console.error('Insert error:', err.message));
+}; // ✅ This ends addFighter properly
 
   const addFight = (fight: Fight) => {
     const updatedFighters = fighters.map(f => {

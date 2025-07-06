@@ -169,7 +169,7 @@ const deleteFight = async (index: number) => {
         platform: fight.platform,
       });
 
-    refreshData();
+    await refreshData();
   } catch (err: any) {
     console.error('Delete fight error:', err.message);
   }

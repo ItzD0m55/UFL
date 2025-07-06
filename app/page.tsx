@@ -136,20 +136,21 @@ useEffect(() => {
   recalculateRecords(updatedFights);
 
   // Sync Supabase
- supabase
-  .from('fights')
-  .delete()
-  .match({
-    fighter1: fightToDelete.fighter1,
-    fighter2: fightToDelete.fighter2,
-    date: fightToDelete.date,
-    platform: fightToDelete.platform,
-  })
-  .then(() => refreshData());
+  supabase
+    .from('fights')
+    .delete()
+    .match({
+      fighter1: fightToDelete.fighter1,
+      fighter2: fightToDelete.fighter2,
+      date: fightToDelete.date,
+      platform: fightToDelete.platform,
+    })
+    .then(() => refreshData());
+};
 
-  const deleteFighter = (name: string) => {
+// ✅ Move this OUTSIDE of deleteFight
+const deleteFighter = (name: string) => {
   const remainingFighters = fighters.filter(f => f.name !== name);
-
   const remainingFights = fights.filter(
     fight => fight.fighter1 !== name && fight.fighter2 !== name
   );

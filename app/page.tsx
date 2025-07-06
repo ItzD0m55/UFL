@@ -105,9 +105,9 @@ useEffect(() => {
   };
 
   try {
-    await supabase.from('fighters').insert([newFighter]);
-    setFighters([...fighters, newFighter]);
-    refreshData();
+   await supabase.from('fighters').insert([newFighter]);
+setFighters([...fighters, newFighter]);
+await refreshData();
   } catch (err: any) {
     console.error('Insert error:', err.message);
   }
@@ -145,8 +145,8 @@ useEffect(() => {
     }
 
     setFighters(updatedFighters);
-    setFights([...fights, fight]);
-    refreshData();
+setFights([...fights, fight]);
+await refreshData();
   } catch (err: any) {
     console.error('Add fight error:', err.message);
   }

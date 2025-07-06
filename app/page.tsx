@@ -146,7 +146,6 @@ useEffect(() => {
     platform: fightToDelete.platform,
   })
   .then(() => refreshData());
-};
 
   const deleteFighter = (name: string) => {
   const remainingFighters = fighters.filter(f => f.name !== name);
